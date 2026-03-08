@@ -25,11 +25,11 @@ import (
 
 func InsertUserIntoDatabase(user dto.User) (int, error) {
 	var lastInsertId int
-	query := `INSERT INTO users (email, username, password_hash) 
-              VALUES ($1, $2, $3) 
+	query := `INSERT INTO users (username, password_hash) 
+              VALUES ($1, $2) 
               RETURNING id`
 
-	err := database.QueryRow(query, user.Email, user.Username, user.Password).Scan(&lastInsertId)
+	err := database.QueryRow(query, user.Username, user.Password).Scan(&lastInsertId)
 	if err != nil {
 		return 0, err
 	}
@@ -50,12 +50,12 @@ func ValueAlreadyExists(whatExists string, value string) (bool, error) {
 	return valueExists, err
 }
 
-func GetUserAuthByEmail(email string) (*dto.UserAuth, error) {
+func GetUserAuthByUsername(username string) (*dto.UserAuth, error) {
 	var user dto.UserAuth
 
 	err := database.QueryRow(
-		`SELECT id, password_hash FROM users WHERE email = $1`,
-		email,
+		`SELECT id, password_hash FROM users WHERE username = $1`,
+		username,
 	).Scan(&user.ID, &user.PasswordHash)
 
 	if err != nil {

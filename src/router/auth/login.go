@@ -55,28 +55,24 @@ func Login(ctx fiber.Ctx) error {
 func parseAndValidate(ctx fiber.Ctx) (*dto.LoginRequest, error) {
 	var body dto.LoginRequest
 
-	// Validate JSON structure
 	if err := ctx.Bind().Body(&body); err != nil {
 		return nil, fiber.ErrBadRequest
 	}
 
-	// Validate required fields
-	if body.Email == "" || body.Password == "" {
-		return nil, fiber.NewError(fiber.StatusBadRequest, "Email and password are required")
+	if body.Username == "" || body.Password == "" {
+		return nil, fiber.NewError(fiber.StatusBadRequest, "Username and password are required")
 	}
 
 	return &body, nil
 }
 
 func authenticate(body *dto.LoginRequest) (*dto.UserAuth, error) {
-	// Fetch user id + password_hash
-	user, err := database.GetUserAuthByEmail(body.Email)
+	user, err := database.GetUserAuthByUsername(body.Username)
 	if err != nil {
-		log.Warn(fmt.Sprintf("Couldn't get the user of %s", body.Email))
+		log.Warn(fmt.Sprintf("Couldn't get the user of %s", body.Username))
 		return nil, fiber.ErrInternalServerError
 	}
 
-	// Compare password
 	if err := bcrypt.CompareHashAndPassword(
 		[]byte(user.PasswordHash),
 		[]byte(body.Password),
@@ -88,14 +84,12 @@ func authenticate(body *dto.LoginRequest) (*dto.UserAuth, error) {
 	return user, nil
 }
 func issueTokens(userID int) (string, string, error) {
-	// Generate JWT
 	token, err := GenerateToken(userID)
 	if err != nil {
 		log.Warn(fmt.Sprintf("Couldn't generate token for %v", userID))
 		return "", "", fiber.ErrInternalServerError
 	}
 
-	// Create refresh token
 	refresh_token, err := database.CreateRefreshToken(userID, 7*24*time.Hour)
 	if err != nil {
 		log.Warn(fmt.Sprintf("Couldn't create refresh token for %v with error %v", userID, err))

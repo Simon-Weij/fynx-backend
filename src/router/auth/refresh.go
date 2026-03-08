@@ -44,7 +44,6 @@ func RefreshToken(ctx fiber.Ctx) error {
 		return err
 	}
 
-	// Returns tokens
 	return ctx.JSON(fiber.Map{
 		"access_token":  accessToken,
 		"refresh_token": newRefreshToken,
@@ -52,17 +51,14 @@ func RefreshToken(ctx fiber.Ctx) error {
 }
 
 func parseRefreshRequest(ctx fiber.Ctx) (string, error) {
-	// Define struct
 	var body struct {
 		RefreshToken string `json:"refresh_token"`
 	}
 
-	// Check if the expected format is matched
 	if err := ctx.Bind().Body(&body); err != nil {
 		return "", fiber.ErrBadRequest
 	}
 
-	// Checks if a refresh token was provided
 	if body.RefreshToken == "" {
 		return "", fiber.NewError(fiber.StatusBadRequest, "refresh_token is required")
 	}
@@ -71,14 +67,12 @@ func parseRefreshRequest(ctx fiber.Ctx) (string, error) {
 }
 
 func rotateTokens(userID int) (string, string, error) {
-	// Generates token
 	accessToken, err := GenerateToken(userID)
 	if err != nil {
 		log.Warn(fmt.Sprintf("Couldn't generate token for %v", userID))
 		return "", "", fiber.ErrInternalServerError
 	}
 
-	// Generates new refresh token
 	newRefreshToken, err := database.CreateRefreshToken(userID, 7*24*time.Hour)
 	if err != nil {
 		log.Warn(fmt.Sprintf("Couldn't generate refreshtoken for %v", userID))

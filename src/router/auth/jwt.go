@@ -48,12 +48,10 @@ func Middleware(ctx fiber.Ctx) error {
 func extractToken(ctx fiber.Ctx) (string, error) {
 	authHeader := ctx.Get("Authorization")
 
-	// Checks if header exists
 	if authHeader == "" {
 		return "", fiber.ErrUnauthorized
 	}
 
-	// Checks if header matches
 	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 	if tokenString == authHeader {
 		return "", fiber.ErrUnauthorized
@@ -62,7 +60,6 @@ func extractToken(ctx fiber.Ctx) (string, error) {
 }
 
 func parseToken(tokenString string) (*jwt.Token, error) {
-	// Verifies jwt token
 	return jwt.Parse(tokenString, func(t *jwt.Token) (interface{}, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fiber.ErrUnauthorized
@@ -72,7 +69,6 @@ func parseToken(tokenString string) (*jwt.Token, error) {
 }
 
 func validateClaims(ctx fiber.Ctx, token *jwt.Token) error {
-	// Checks if token is expired
 	if claims, ok := token.Claims.(jwt.MapClaims); ok {
 		if exp, ok := claims["exp"].(float64); ok {
 			if time.Now().Unix() > int64(exp) {

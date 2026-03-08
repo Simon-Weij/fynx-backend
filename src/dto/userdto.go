@@ -20,13 +20,12 @@ package dto
 
 type User struct {
 	ID       int    `db:"id"`
-	Email    string `db:"email"`
 	Username string `db:"username"`
 	Password string `db:"password_hash"`
 }
 
 type LoginRequest struct {
-	Email    string `json:"email"`
+	Username string `json:"username"`
 	Password string `json:"password"`
 }
 

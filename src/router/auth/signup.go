@@ -49,7 +49,6 @@ func Signup(ctx fiber.Ctx) error {
 func parseAndValidateSignup(ctx fiber.Ctx) (*dto.User, error) {
 	var userDto dto.User
 
-	// Validate JSON structure
 	if err := ctx.Bind().Body(&userDto); err != nil {
 		return nil, fiber.ErrBadRequest
 	}
@@ -58,10 +57,6 @@ func parseAndValidateSignup(ctx fiber.Ctx) (*dto.User, error) {
 }
 
 func checkUserConflicts(userDto *dto.User) error {
-	// Check if email and username already exists
-	if err := checkForConflicts("email", userDto.Email); err != nil {
-		return err
-	}
 	if err := checkForConflicts("username", userDto.Username); err != nil {
 		return err
 	}
@@ -69,7 +64,6 @@ func checkUserConflicts(userDto *dto.User) error {
 }
 
 func processAndStoreUser(userDto *dto.User) error {
-	// Hash password
 	hash, err := bcrypt.GenerateFromPassword([]byte(userDto.Password), bcrypt.DefaultCost)
 	if err != nil {
 		log.Warn("Couldn't hash the password!")
@@ -77,7 +71,6 @@ func processAndStoreUser(userDto *dto.User) error {
 	}
 	userDto.Password = string(hash)
 
-	// Insert user into database
 	database.InsertUserIntoDatabase(*userDto)
 	return nil
 }
