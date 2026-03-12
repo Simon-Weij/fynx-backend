@@ -18,14 +18,16 @@ func main() {
 	})
 	app.Use(logger.New())
 
-	app.Get("/", auth.Middleware, router.HelloWorld)
+	api := app.Group("/api")
 
-	authGroup := app.Group("/auth")
+	api.Get("/", auth.Middleware, router.HelloWorld)
+
+	authGroup := api.Group("/auth")
 	authGroup.Post("/signup", auth.Signup)
 	authGroup.Post("/login", auth.Login)
 	authGroup.Post("/refresh", auth.RefreshToken)
 
-	videosGroup := app.Group("/videos")
+	videosGroup := api.Group("/videos")
 	videosGroup.Post("/upload", auth.Middleware, videos.UploadVideo)
 	videosGroup.Get("/get/:id", auth.Middleware, videos.ServeVideoById)
 
