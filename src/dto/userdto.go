@@ -6,11 +6,6 @@ type User struct {
 	Password string `db:"password_hash"`
 }
 
-type LoginRequest struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-}
-
 type UserAuth struct {
 	ID           int
 	PasswordHash string

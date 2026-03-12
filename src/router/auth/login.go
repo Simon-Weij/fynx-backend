@@ -11,6 +11,11 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+type LoginRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
 // /auth/login
 func Login(ctx fiber.Ctx) error {
 	body, err := parseAndValidate(ctx)
@@ -34,8 +39,8 @@ func Login(ctx fiber.Ctx) error {
 	})
 }
 
-func parseAndValidate(ctx fiber.Ctx) (*dto.LoginRequest, error) {
-	var body dto.LoginRequest
+func parseAndValidate(ctx fiber.Ctx) (*LoginRequest, error) {
+	var body LoginRequest
 
 	if err := ctx.Bind().Body(&body); err != nil {
 		return nil, fiber.ErrBadRequest
@@ -48,7 +53,7 @@ func parseAndValidate(ctx fiber.Ctx) (*dto.LoginRequest, error) {
 	return &body, nil
 }
 
-func authenticate(body *dto.LoginRequest) (*dto.UserAuth, error) {
+func authenticate(body *LoginRequest) (*dto.UserAuth, error) {
 	user, err := database.GetUserAuthByUsername(body.Username)
 	if err != nil {
 		log.Warn(fmt.Sprintf("Couldn't get the user of %s", body.Username))
