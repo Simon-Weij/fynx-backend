@@ -33,9 +33,10 @@ func Login(ctx fiber.Ctx) error {
 		return err
 	}
 
+	setRefreshTokenCookie(ctx, refreshToken)
+
 	return ctx.JSON(fiber.Map{
-		"token":         token,
-		"refresh_token": refreshToken,
+		"token": token,
 	})
 }
 

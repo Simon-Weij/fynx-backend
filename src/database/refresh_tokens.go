@@ -1,6 +1,7 @@
 package database
 
 import (
+	"database/sql"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -95,4 +96,98 @@ func RefreshToken(userID int, rawRefreshToken string, tokenDuration time.Duratio
 	}
 
 	return signedToken, nil
+}
+
+func DeleteRefreshToken(rawToken string) error {
+	hash := sha256.Sum256([]byte(rawToken))
+	hashedToken := hex.EncodeToString(hash[:])
+
+	_, err := database.Exec(
+		`DELETE FROM refresh_tokens WHERE hashed_token = $1`,
+		hashedToken,
+	)
+
+	return err
+}
+
+func RotateRefreshToken(userID int, oldRawToken string, duration time.Duration) (string, error) {
+	oldHashedToken := hashRefreshToken(oldRawToken)
+	newRawToken, err := generateRawRefreshToken()
+	if err != nil {
+		return "", err
+	}
+
+	newHashedToken := hashRefreshToken(newRawToken)
+	newExpiresAt := time.Now().Add(duration)
+
+	tx, err := database.Begin()
+	if err != nil {
+		return "", err
+	}
+
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	result, err := deleteRefreshTokenInTx(tx, userID, oldHashedToken)
+	if err != nil {
+		return "", err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return "", err
+	}
+
+	if rowsAffected == 0 {
+		return "", sql.ErrNoRows
+	}
+
+	err = insertRefreshTokenInTx(tx, userID, newHashedToken, newExpiresAt)
+	if err != nil {
+		return "", err
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return "", err
+	}
+
+	return newRawToken, nil
+}
+
+func hashRefreshToken(rawToken string) string {
+	hash := sha256.Sum256([]byte(rawToken))
+	return hex.EncodeToString(hash[:])
+}
+
+func generateRawRefreshToken() (string, error) {
+	b := make([]byte, 32)
+	_, err := rand.Read(b)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate random token: %w", err)
+	}
+
+	return hex.EncodeToString(b), nil
+}
+
+func deleteRefreshTokenInTx(tx *sql.Tx, userID int, hashedToken string) (sql.Result, error) {
+	return tx.Exec(
+		`DELETE FROM refresh_tokens WHERE user_id = $1 AND hashed_token = $2`,
+		userID,
+		hashedToken,
+	)
+}
+
+func insertRefreshTokenInTx(tx *sql.Tx, userID int, hashedToken string, expiresAt time.Time) error {
+	_, err := tx.Exec(
+		`INSERT INTO refresh_tokens (user_id, hashed_token, expires_at) VALUES ($1, $2, $3)`,
+		userID,
+		hashedToken,
+		expiresAt,
+	)
+
+	return err
 }

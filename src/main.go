@@ -26,6 +26,7 @@ func main() {
 	authGroup.Post("/signup", auth.Signup)
 	authGroup.Post("/login", auth.Login)
 	authGroup.Post("/refresh", auth.RefreshToken)
+	authGroup.Post("/logout", auth.Logout)
 
 	videosGroup := api.Group("/videos")
 	videosGroup.Post("/upload", auth.Middleware, videos.UploadVideo)

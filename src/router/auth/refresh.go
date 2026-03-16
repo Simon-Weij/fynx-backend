@@ -21,43 +21,37 @@ func RefreshToken(ctx fiber.Ctx) error {
 		return fiber.ErrUnauthorized
 	}
 
-	accessToken, newRefreshToken, err := rotateTokens(userID)
+	accessToken, newRefreshToken, err := rotateTokens(userID, refreshToken)
 	if err != nil {
 		return err
 	}
 
+	setRefreshTokenCookie(ctx, newRefreshToken)
+
 	return ctx.JSON(fiber.Map{
-		"access_token":  accessToken,
-		"refresh_token": newRefreshToken,
+		"access_token": accessToken,
 	})
 }
 
 func parseRefreshRequest(ctx fiber.Ctx) (string, error) {
-	var body struct {
-		RefreshToken string `json:"refresh_token"`
+	refreshToken := getRefreshTokenCookie(ctx)
+	if refreshToken == "" {
+		return "", fiber.NewError(fiber.StatusUnauthorized, "refresh token cookie is required")
 	}
 
-	if err := ctx.Bind().Body(&body); err != nil {
-		return "", fiber.ErrBadRequest
-	}
-
-	if body.RefreshToken == "" {
-		return "", fiber.NewError(fiber.StatusBadRequest, "refresh_token is required")
-	}
-
-	return body.RefreshToken, nil
+	return refreshToken, nil
 }
 
-func rotateTokens(userID int) (string, string, error) {
+func rotateTokens(userID int, oldRefreshToken string) (string, string, error) {
 	accessToken, err := GenerateToken(userID)
 	if err != nil {
 		log.Warn(fmt.Sprintf("Couldn't generate token for %v", userID))
 		return "", "", fiber.ErrInternalServerError
 	}
 
-	newRefreshToken, err := database.CreateRefreshToken(userID, 7*24*time.Hour)
+	newRefreshToken, err := database.RotateRefreshToken(userID, oldRefreshToken, 7*24*time.Hour)
 	if err != nil {
-		log.Warn(fmt.Sprintf("Couldn't generate refreshtoken for %v", userID))
+		log.Warn(fmt.Sprintf("Couldn't rotate refreshtoken for %v", userID))
 		return "", "", fiber.ErrInternalServerError
 	}
 
