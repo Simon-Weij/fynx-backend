@@ -4,8 +4,11 @@ RUN apk add --no-cache just
 
 WORKDIR /app
 
-COPY . .
+COPY go.mod go.sum ./
+RUN go mod download
 
+COPY justfile ./
+COPY src ./src
 RUN just build /app/wayland-recorder-backend
 
 FROM gcr.io/distroless/static-debian13
