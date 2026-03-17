@@ -1,7 +1,6 @@
 package database
 
 import (
-	"database/sql"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -10,6 +9,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"gorm.io/gorm"
 )
 
 func CreateRefreshToken(userID int, duration time.Duration) (string, error) {
@@ -26,14 +26,13 @@ func CreateRefreshToken(userID int, duration time.Duration) (string, error) {
 
 	expiresAt := time.Now().Add(duration)
 
-	query := `
-		INSERT INTO refresh_tokens (user_id, hashed_token, expires_at)
-		VALUES ($1, $2, $3)
-		RETURNING id
-	`
+	refreshToken := RefreshTokenModel{
+		UserID:      userID,
+		HashedToken: hashedToken,
+		ExpiresAt:   expiresAt,
+	}
 
-	var tokenID int
-	err = database.QueryRow(query, userID, hashedToken, expiresAt).Scan(&tokenID)
+	err = database.Create(&refreshToken).Error
 	if err != nil {
 		return "", fmt.Errorf("failed to store refresh token: %w", err)
 	}
@@ -45,41 +44,31 @@ func GetUserIDFromRefreshToken(rawToken string) (int, error) {
 	hash := sha256.Sum256([]byte(rawToken))
 	hashedToken := hex.EncodeToString(hash[:])
 
-	var userID int
-	var expiresAt time.Time
-
-	err := database.QueryRow(
-		`SELECT user_id, expires_at FROM refresh_tokens WHERE hashed_token = $1`,
-		hashedToken,
-	).Scan(&userID, &expiresAt)
+	var tokenRecord RefreshTokenModel
+	err := database.Where("hashed_token = ?", hashedToken).First(&tokenRecord).Error
 
 	if err != nil {
 		return 0, err
 	}
 
-	if time.Now().After(expiresAt) {
+	if time.Now().After(tokenRecord.ExpiresAt) {
 		return 0, errors.New("refresh token expired")
 	}
 
-	return userID, nil
+	return tokenRecord.UserID, nil
 }
 
 func RefreshToken(userID int, rawRefreshToken string, tokenDuration time.Duration) (string, error) {
 	hash := sha256.Sum256([]byte(rawRefreshToken))
 	hashedToken := hex.EncodeToString(hash[:])
 
-	var expiresAt time.Time
-	query := `
-		SELECT expires_at
-		FROM refresh_tokens
-		WHERE user_id = $1 AND hashed_token = $2
-	`
-	err := database.QueryRow(query, userID, hashedToken).Scan(&expiresAt)
+	var tokenRecord RefreshTokenModel
+	err := database.Where("user_id = ? AND hashed_token = ?", userID, hashedToken).First(&tokenRecord).Error
 	if err != nil {
 		return "", errors.New("invalid refresh token")
 	}
 
-	if time.Now().After(expiresAt) {
+	if time.Now().After(tokenRecord.ExpiresAt) {
 		return "", errors.New("refresh token expired")
 	}
 
@@ -102,12 +91,7 @@ func DeleteRefreshToken(rawToken string) error {
 	hash := sha256.Sum256([]byte(rawToken))
 	hashedToken := hex.EncodeToString(hash[:])
 
-	_, err := database.Exec(
-		`DELETE FROM refresh_tokens WHERE hashed_token = $1`,
-		hashedToken,
-	)
-
-	return err
+	return database.Where("hashed_token = ?", hashedToken).Delete(&RefreshTokenModel{}).Error
 }
 
 func RotateRefreshToken(userID int, oldRawToken string, duration time.Duration) (string, error) {
@@ -120,37 +104,22 @@ func RotateRefreshToken(userID int, oldRawToken string, duration time.Duration) 
 	newHashedToken := hashRefreshToken(newRawToken)
 	newExpiresAt := time.Now().Add(duration)
 
-	tx, err := database.Begin()
-	if err != nil {
-		return "", err
-	}
-
-	defer func() {
-		if err != nil {
-			tx.Rollback()
+	err = database.Transaction(func(tx *gorm.DB) error {
+		result := tx.Where("user_id = ? AND hashed_token = ?", userID, oldHashedToken).Delete(&RefreshTokenModel{})
+		if result.Error != nil {
+			return result.Error
 		}
-	}()
 
-	result, err := deleteRefreshTokenInTx(tx, userID, oldHashedToken)
-	if err != nil {
-		return "", err
-	}
+		if result.RowsAffected == 0 {
+			return gorm.ErrRecordNotFound
+		}
 
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return "", err
-	}
-
-	if rowsAffected == 0 {
-		return "", sql.ErrNoRows
-	}
-
-	err = insertRefreshTokenInTx(tx, userID, newHashedToken, newExpiresAt)
-	if err != nil {
-		return "", err
-	}
-
-	err = tx.Commit()
+		return tx.Create(&RefreshTokenModel{
+			UserID:      userID,
+			HashedToken: newHashedToken,
+			ExpiresAt:   newExpiresAt,
+		}).Error
+	})
 	if err != nil {
 		return "", err
 	}
@@ -171,23 +140,4 @@ func generateRawRefreshToken() (string, error) {
 	}
 
 	return hex.EncodeToString(b), nil
-}
-
-func deleteRefreshTokenInTx(tx *sql.Tx, userID int, hashedToken string) (sql.Result, error) {
-	return tx.Exec(
-		`DELETE FROM refresh_tokens WHERE user_id = $1 AND hashed_token = $2`,
-		userID,
-		hashedToken,
-	)
-}
-
-func insertRefreshTokenInTx(tx *sql.Tx, userID int, hashedToken string, expiresAt time.Time) error {
-	_, err := tx.Exec(
-		`INSERT INTO refresh_tokens (user_id, hashed_token, expires_at) VALUES ($1, $2, $3)`,
-		userID,
-		hashedToken,
-		expiresAt,
-	)
-
-	return err
 }

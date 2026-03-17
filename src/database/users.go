@@ -3,46 +3,61 @@ package database
 import (
 	"fmt"
 	"simon-weij/wayland-recorder-backend/src/dto"
+
+	"gorm.io/gorm"
 )
 
 func InsertUserIntoDatabase(user dto.User) (int, error) {
-	var lastInsertId int
-	query := `INSERT INTO users (username, password_hash) 
-              VALUES ($1, $2) 
-              RETURNING id`
+	newUser := UserModel{
+		Username:     user.Username,
+		PasswordHash: user.Password,
+	}
 
-	err := database.QueryRow(query, user.Username, user.Password).Scan(&lastInsertId)
+	err := database.Create(&newUser).Error
 	if err != nil {
 		return 0, err
 	}
-	return lastInsertId, nil
+
+	return newUser.ID, nil
 }
 
 func ValueAlreadyExists(whatExists string, value string) (bool, error) {
-	var valueExists bool
+	if whatExists != "username" {
+		return false, fmt.Errorf("unsupported field: %s", whatExists)
+	}
 
-	query := fmt.Sprintf(`
-		SELECT EXISTS(
-			SELECT 1
-			FROM users
-			WHERE %s = $1
-		)
-	`, whatExists)
-	err := database.QueryRow(query, value).Scan(&valueExists)
-	return valueExists, err
+	var count int64
+	err := database.Model(&UserModel{}).Where("username = ?", value).Count(&count).Error
+	if err != nil {
+		return false, err
+	}
+
+	return count > 0, nil
 }
 
 func GetUserAuthByUsername(username string) (*dto.UserAuth, error) {
 	var user dto.UserAuth
 
-	err := database.QueryRow(
-		`SELECT id, password_hash FROM users WHERE username = $1`,
-		username,
-	).Scan(&user.ID, &user.PasswordHash)
+	type userAuthQueryResult struct {
+		ID           int    `gorm:"column:id"`
+		PasswordHash string `gorm:"column:password_hash"`
+	}
+
+	var result userAuthQueryResult
+	err := database.Model(&UserModel{}).
+		Select("id", "password_hash").
+		Where("username = ?", username).
+		First(&result).Error
 
 	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, err
+		}
 		return nil, err
 	}
+
+	user.ID = result.ID
+	user.PasswordHash = result.PasswordHash
 
 	return &user, nil
 }

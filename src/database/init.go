@@ -1,13 +1,14 @@
 package database
 
 import (
-	"database/sql"
 	"fmt"
 	"log"
 	"os"
+	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/joho/godotenv"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
 type DatabaseCredentials struct {
@@ -18,8 +19,45 @@ type DatabaseCredentials struct {
 	dbName     string
 }
 
-var database *sql.DB
+var database *gorm.DB
 var jwtSecret = []byte(os.Getenv("JWT_SECRET"))
+
+type UserModel struct {
+	ID           int       `gorm:"primaryKey;autoIncrement"`
+	Username     string    `gorm:"size:50;uniqueIndex;not null"`
+	PasswordHash string    `gorm:"column:password_hash;type:text;not null"`
+	CreatedAt    time.Time `gorm:"column:created_at;autoCreateTime"`
+}
+
+func (UserModel) TableName() string {
+	return "users"
+}
+
+type VideoModel struct {
+	ID        int       `gorm:"primaryKey;autoIncrement"`
+	OwnerID   int       `gorm:"column:owner_id;not null;index"`
+	Title     string    `gorm:"size:255;not null"`
+	VideoHash string    `gorm:"column:video_hash;size:255;not null"`
+	Extension string    `gorm:"size:10;not null"`
+	IsPrivate bool      `gorm:"column:is_private;not null;default:false"`
+	CreatedAt time.Time `gorm:"column:created_at;autoCreateTime"`
+}
+
+func (VideoModel) TableName() string {
+	return "videos"
+}
+
+type RefreshTokenModel struct {
+	ID          int       `gorm:"primaryKey;autoIncrement"`
+	UserID      int       `gorm:"column:user_id;not null;index"`
+	HashedToken string    `gorm:"column:hashed_token;size:255;not null;uniqueIndex"`
+	ExpiresAt   time.Time `gorm:"column:expires_at;not null"`
+	CreatedAt   time.Time `gorm:"column:created_at;autoCreateTime"`
+}
+
+func (RefreshTokenModel) TableName() string {
+	return "refresh_tokens"
+}
 
 func InitialiseDatabase() {
 	godotenv.Load()
@@ -40,55 +78,24 @@ func InitialiseDatabase() {
 	)
 
 	var err error
-	database, err = sql.Open("pgx", connectionString)
+	database, err = gorm.Open(postgres.Open(connectionString), &gorm.Config{})
 
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	err = database.Ping()
+	sqlDB, err := database.DB()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	setupUsersTable()
-	setupRefreshTokenTable()
-	setupVideosTable()
-}
+	err = sqlDB.Ping()
+	if err != nil {
+		log.Fatal(err)
+	}
 
-func setupUsersTable() {
-	database.Query(`
-	CREATE TABLE IF NOT EXISTS users (
-		id SERIAL PRIMARY KEY,
-		username VARCHAR(50) UNIQUE NOT NULL,
-		password_hash TEXT NOT NULL,
-		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-	);
-	`)
-}
-
-func setupVideosTable() {
-	database.Query(`
-	CREATE TABLE IF NOT EXISTS videos (
-		id SERIAL PRIMARY KEY,
-		owner_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-		title VARCHAR(255) NOT NULL,
-		video_hash VARCHAR(255) NOT NULL,
-		extension VARCHAR(10) NOT NULL,
-		is_private BOOLEAN NOT NULL DEFAULT FALSE,
-		created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-	);
-	`)
-}
-
-func setupRefreshTokenTable() {
-	database.Query(`
-	CREATE TABLE IF NOT EXISTS refresh_tokens (
-		id SERIAL PRIMARY KEY,
-		user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-		hashed_token VARCHAR(255) NOT NULL,
-		expires_at TIMESTAMPTZ NOT NULL,
-		created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-	);
-	`)
+	err = database.AutoMigrate(&UserModel{}, &RefreshTokenModel{}, &VideoModel{})
+	if err != nil {
+		log.Fatal(err)
+	}
 }

@@ -1,7 +1,6 @@
 package database
 
 import (
-	"database/sql"
 	"time"
 )
 
@@ -18,44 +17,36 @@ type Video struct {
 }
 
 func InsertVideo(ownerID int, title, videoHash string, extension string, isPrivate bool) (int, error) {
-	var id int
-	err := database.QueryRow(`
-		INSERT INTO videos (owner_id, title, video_hash, extension, is_private)
-		VALUES ($1, $2, $3, $4, $5)
-		RETURNING id
-	`, ownerID, title, videoHash, extension, isPrivate).Scan(&id)
+	record := VideoModel{
+		OwnerID:   ownerID,
+		Title:     title,
+		VideoHash: videoHash,
+		Extension: extension,
+		IsPrivate: isPrivate,
+	}
+
+	err := database.Create(&record).Error
 	if err != nil {
 		return 0, err
 	}
-	return id, nil
+
+	return record.ID, nil
 }
 
 func GetVideoByID(videoID int, currentUserID int) (*Video, error) {
 	var video Video
+	result := database.Table("videos v").
+		Select(`v.id, v.owner_id, u.username as owner_name, v.title, v.video_hash, v.extension, v.is_private, v.created_at, (v.owner_id = ?) as is_owner`, currentUserID).
+		Joins("JOIN users u ON v.owner_id = u.id").
+		Where("v.id = ?", videoID).
+		Scan(&video)
 
-	err := database.QueryRow(`
-        SELECT v.id, v.owner_id, u.username, v.title, v.video_hash, v.extension, v.is_private, v.created_at, 
-               (v.owner_id = $2) AS is_owner
-        FROM videos v
-        JOIN users u ON v.owner_id = u.id
-        WHERE v.id = $1
-    `, videoID, currentUserID).Scan(
-		&video.ID,
-		&video.OwnerID,
-		&video.OwnerName,
-		&video.Title,
-		&video.VideoHash,
-		&video.Extension,
-		&video.IsPrivate,
-		&video.CreatedAt,
-		&video.IsOwner,
-	)
+	if result.Error != nil {
+		return nil, result.Error
+	}
 
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
-		return nil, err
+	if result.RowsAffected == 0 {
+		return nil, nil
 	}
 
 	return &video, nil
