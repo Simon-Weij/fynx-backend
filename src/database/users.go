@@ -21,6 +21,23 @@ func InsertUserIntoDatabase(user dto.User) (int, error) {
 	return newUser.ID, nil
 }
 
+func GetUserByID(id int) (*dto.User, error) {
+	var result UserModel
+
+	err := database.Model(&UserModel{}).
+		Select("id", "username").
+		Where("id = ?", id).
+		First(&result).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &dto.User{
+		Username: result.Username,
+	}, nil
+}
+
 func ValueAlreadyExists(whatExists string, value string) (bool, error) {
 	if whatExists != "username" {
 		return false, fmt.Errorf("unsupported field: %s", whatExists)

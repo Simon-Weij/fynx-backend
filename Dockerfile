@@ -1,15 +1,12 @@
 FROM golang:1.26.0-alpine3.23 AS build
 
-RUN apk add --no-cache just
-
 WORKDIR /app
 
 COPY go.mod go.sum ./
 RUN go mod download
 
-COPY justfile ./
 COPY src ./src
-RUN just build /app/wayland-recorder-backend
+RUN CGO_ENABLED=0 go build -o /app/wayland-recorder-backend ./src
 
 FROM gcr.io/distroless/static-debian13
 

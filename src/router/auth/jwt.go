@@ -51,18 +51,27 @@ func parseToken(tokenString string) (*jwt.Token, error) {
 }
 
 func validateClaims(ctx fiber.Ctx, token *jwt.Token) error {
-	if claims, ok := token.Claims.(jwt.MapClaims); ok {
-		if exp, ok := claims["exp"].(float64); ok {
-			if time.Now().Unix() > int64(exp) {
-				return fiber.ErrUnauthorized
-			}
-		}
-
-		ctx.Locals("userID", claims["sub"])
-		return ctx.Next()
+	if token == nil || !token.Valid {
+		return fiber.ErrUnauthorized
 	}
 
-	return fiber.ErrUnauthorized
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return fiber.ErrUnauthorized
+	}
+
+	exp, ok := claims["exp"].(float64)
+	if !ok || time.Now().Unix() > int64(exp) {
+		return fiber.ErrUnauthorized
+	}
+
+	userID, ok := claims["sub"]
+	if !ok {
+		return fiber.ErrUnauthorized
+	}
+
+	ctx.Locals("userID", userID)
+	return ctx.Next()
 }
 
 func GenerateToken(userID int) (string, error) {
@@ -89,6 +98,6 @@ func GetUID(ctx fiber.Ctx) (int, error) {
 		return v, nil
 	default:
 		log.Error(fmt.Sprintf("Couldn't get user id for %v", userID))
-		return 0, fiber.ErrInternalServerError
+		return 0, fiber.ErrUnauthorized
 	}
 }
