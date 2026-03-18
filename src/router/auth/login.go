@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"errors"
 	"fmt"
 	"simon-weij/wayland-recorder-backend/src/database"
 	"simon-weij/wayland-recorder-backend/src/dto"
@@ -9,6 +10,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/log"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
 type LoginRequest struct {
@@ -57,6 +59,9 @@ func parseAndValidate(ctx fiber.Ctx) (*LoginRequest, error) {
 func authenticate(body *LoginRequest) (*dto.UserAuth, error) {
 	user, err := database.GetUserAuthByUsername(body.Username)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fiber.NewError(fiber.StatusUnauthorized, "invalid username or password")
+		}
 		log.Warn(fmt.Sprintf("Couldn't get the user of %s", body.Username))
 		return nil, fiber.ErrInternalServerError
 	}
@@ -65,8 +70,7 @@ func authenticate(body *LoginRequest) (*dto.UserAuth, error) {
 		[]byte(user.PasswordHash),
 		[]byte(body.Password),
 	); err != nil {
-		log.Warn("Couldn't compare hash")
-		return nil, fiber.ErrInternalServerError
+		return nil, fiber.NewError(fiber.StatusUnauthorized, "invalid username or password")
 	}
 
 	return user, nil
